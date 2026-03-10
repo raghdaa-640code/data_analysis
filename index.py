@@ -1,207 +1,201 @@
-
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
 import sqlite3
-from openpyxl import Workbook
+import numpy as np
+import matplotlib.pyplot as plt
 
-# ---------------- DATABASE ---------------- #
+# =========================
+# Database
+# =========================
 
-class Database:
+conn = sqlite3.connect("data_analysis.db")
+cursor = conn.cursor()
 
-    def __init__(self):
-        self.conn = sqlite3.connect("students.db")
-        self.cur = self.conn.cursor()
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS sales(
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+month TEXT,
+value INTEGER
+)
+""")
 
-        self.cur.execute("""
-        CREATE TABLE IF NOT EXISTS students(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        age INTEGER,
-        grade TEXT
-        )
-        """)
-        self.conn.commit()
+conn.commit()
 
-    def add(self,name,age,grade):
-        self.cur.execute(
-        "INSERT INTO students(name,age,grade) VALUES(?,?,?)",
-        (name,age,grade))
-        self.conn.commit()
+# =========================
+# Insert Data
+# =========================
 
-    def delete(self,id):
-        self.cur.execute("DELETE FROM students WHERE id=?", (id,))
-        self.conn.commit()
+def add_data():
+    month = month_entry.get()
+    value = value_entry.get()
 
-    def update(self,id,name,age,grade):
-        self.cur.execute(
-        "UPDATE students SET name=?,age=?,grade=? WHERE id=?",
-        (name,age,grade,id))
-        self.conn.commit()
+    cursor.execute("INSERT INTO sales(month,value) VALUES (?,?)",(month,value))
+    conn.commit()
 
-    def fetch(self):
-        self.cur.execute("SELECT * FROM students")
-        return self.cur.fetchall()
+    month_entry.delete(0,tk.END)
+    value_entry.delete(0,tk.END)
 
-# ---------------- APP ---------------- #
+    show_data()
 
-class App:
 
-    def __init__(self,root):
+# =========================
+# Show Data
+# =========================
 
-        self.db = Database()
+def show_data():
 
-        root.title("Student Management System")
-        root.geometry("700x500")
-        root.config(bg="#f5f6fa")
+    for row in table.get_children():
+        table.delete(row)
 
-        # ---------- FRAME INPUT ---------- #
+    cursor.execute("SELECT * FROM sales")
+    rows = cursor.fetchall()
 
-        frame = tk.Frame(root,bg="#ffffff",padx=10,pady=10)
-        frame.pack(pady=10)
+    for r in rows:
+        table.insert("",tk.END,values=r)
 
-        tk.Label(frame,text="Name",bg="#ffffff").grid(row=0,column=0)
-        tk.Label(frame,text="Age",bg="#ffffff").grid(row=1,column=0)
-        tk.Label(frame,text="Grade",bg="#ffffff").grid(row=2,column=0)
 
-        self.name = tk.Entry(frame)
-        self.age = tk.Entry(frame)
-        self.grade = tk.Entry(frame)
+# =========================
+# Get Data for Analysis
+# =========================
 
-        self.name.grid(row=0,column=1)
-        self.age.grid(row=1,column=1)
-        self.grade.grid(row=2,column=1)
+def get_values():
 
-        # ---------- BUTTON FRAME ---------- #
+    cursor.execute("SELECT value FROM sales")
+    rows = cursor.fetchall()
 
-        btn_frame = tk.Frame(root,bg="#f5f6fa")
-        btn_frame.pack(pady=10)
+    values = np.array([r[0] for r in rows])
 
-        self.add_btn = tk.Button(btn_frame,text="➕ Add",width=12,command=self.add_student)
-        self.update_btn = tk.Button(btn_frame,text="✏ Update",width=12,command=self.update_student)
-        self.delete_btn = tk.Button(btn_frame,text="🗑 Delete",width=12,command=self.delete_student)
-        self.export_btn = tk.Button(btn_frame,text="📁 Export Excel",width=15,command=self.export_excel)
+    return values
 
-        self.add_btn.grid(row=0,column=0,padx=5)
-        self.update_btn.grid(row=0,column=1,padx=5)
-        self.delete_btn.grid(row=0,column=2,padx=5)
-        self.export_btn.grid(row=0,column=3,padx=5)
 
-        # ---------- SIMPLE BUTTON ANIMATION ---------- #
+# =========================
+# Charts
+# =========================
 
-        for btn in [self.add_btn,self.update_btn,self.delete_btn,self.export_btn]:
+def bar_chart():
 
-            btn.bind("<Enter>",lambda e,b=btn: b.config(bg="#dfe6e9"))
-            btn.bind("<Leave>",lambda e,b=btn: b.config(bg="SystemButtonFace"))
+    cursor.execute("SELECT month,value FROM sales")
+    rows = cursor.fetchall()
 
-        # ---------- TABLE ---------- #
+    months = [r[0] for r in rows]
+    values = np.array([r[1] for r in rows])
 
-        table_frame = tk.Frame(root)
-        table_frame.pack()
+    plt.bar(months,values,color="#ff8fab")
+    plt.title("Sales Bar Chart")
+    plt.show()
 
-        self.table = ttk.Treeview(
-        table_frame,
-        columns=("ID","Name","Age","Grade"),
-        show="headings",
-        height=10)
 
-        self.table.heading("ID",text="ID")
-        self.table.heading("Name",text="Name")
-        self.table.heading("Age",text="Age")
-        self.table.heading("Grade",text="Grade")
+def line_chart():
 
-        self.table.column("ID",width=50)
-        self.table.column("Name",width=200)
-        self.table.column("Age",width=100)
-        self.table.column("Grade",width=100)
+    cursor.execute("SELECT month,value FROM sales")
+    rows = cursor.fetchall()
 
-        self.table.pack()
+    months = [r[0] for r in rows]
+    values = np.array([r[1] for r in rows])
 
-        self.table.bind("<<TreeviewSelect>>",self.select_student)
+    plt.plot(months,values,marker="o",color="#cdb4db")
+    plt.title("Sales Line Chart")
+    plt.show()
 
-        self.load_data()
 
-    # ---------- FUNCTIONS ---------- #
+def pie_chart():
 
-    def load_data(self):
+    cursor.execute("SELECT month,value FROM sales")
+    rows = cursor.fetchall()
 
-        for row in self.table.get_children():
-            self.table.delete(row)
+    months = [r[0] for r in rows]
+    values = np.array([r[1] for r in rows])
 
-        for student in self.db.fetch():
-            self.table.insert("",tk.END,values=student)
+    plt.pie(values,labels=months,autopct="%1.1f%%")
+    plt.title("Sales Distribution")
+    plt.show()
 
-    def add_student(self):
 
-        self.db.add(
-        self.name.get(),
-        self.age.get(),
-        self.grade.get())
+# =========================
+# Statistics
+# =========================
 
-        self.load_data()
+def analyze():
 
-    def delete_student(self):
+    values = get_values()
 
-        selected = self.table.focus()
+    if len(values)==0:
+        result_label.config(text="No Data")
+        return
 
-        if not selected:
-            return
+    mean = np.mean(values)
+    total = np.sum(values)
+    max_val = np.max(values)
+    min_val = np.min(values)
 
-        data = self.table.item(selected,"values")
+    result_label.config(
+        text=f"Mean = {mean:.2f}   Total = {total}   Max = {max_val}   Min = {min_val}"
+    )
 
-        self.db.delete(data[0])
 
-        self.load_data()
-
-    def update_student(self):
-
-        selected = self.table.focus()
-
-        if not selected:
-            return
-
-        data = self.table.item(selected,"values")
-
-        self.db.update(
-        data[0],
-        self.name.get(),
-        self.age.get(),
-        self.grade.get())
-
-        self.load_data()
-
-    def select_student(self,event):
-
-        selected = self.table.focus()
-
-        if not selected:
-            return
-
-        data = self.table.item(selected,"values")
-
-        self.name.delete(0,tk.END)
-        self.age.delete(0,tk.END)
-        self.grade.delete(0,tk.END)
-
-        self.name.insert(0,data[1])
-        self.age.insert(0,data[2])
-        self.grade.insert(0,data[3])
-
-    def export_excel(self):
-
-        wb = Workbook()
-        ws = wb.active
-
-        ws.append(["ID","Name","Age","Grade"])
-
-        for student in self.db.fetch():
-            ws.append(student)
-
-        wb.save("students.xlsx")
-
-        messagebox.showinfo("Success","Exported to students.xlsx")
-
-# ---------------- RUN ---------------- #
+# =========================
+# GUI
+# =========================
 
 root = tk.Tk()
-app = App(root)
+root.title("Data Analysis Program")
+root.geometry("750x500")
+root.config(bg="#f8edeb")
+
+title = tk.Label(root,text="Data Analysis Dashboard",
+font=("Arial",18,"bold"),bg="#f8edeb",fg="#6d6875")
+
+title.pack(pady=10)
+
+
+# Frame Inputs
+frame = tk.Frame(root,bg="#f8edeb")
+frame.pack()
+
+tk.Label(frame,text="Month",bg="#f8edeb").grid(row=0,column=0,padx=10)
+month_entry = tk.Entry(frame)
+month_entry.grid(row=0,column=1)
+
+tk.Label(frame,text="Value",bg="#f8edeb").grid(row=0,column=2,padx=10)
+value_entry = tk.Entry(frame)
+value_entry.grid(row=0,column=3)
+
+tk.Button(frame,text="Add Data",
+bg="#ffb4a2",
+command=add_data).grid(row=0,column=4,padx=10)
+
+
+# Table
+table = ttk.Treeview(root,columns=("ID","Month","Value"),show="headings")
+table.heading("ID",text="ID")
+table.heading("Month",text="Month")
+table.heading("Value",text="Value")
+
+table.pack(pady=20)
+
+
+# Buttons
+btn_frame = tk.Frame(root,bg="#f8edeb")
+btn_frame.pack()
+
+tk.Button(btn_frame,text="Bar Chart",
+bg="#ffc8dd",width=12,command=bar_chart).grid(row=0,column=0,padx=10)
+
+tk.Button(btn_frame,text="Line Chart",
+bg="#cdb4db",width=12,command=line_chart).grid(row=0,column=1,padx=10)
+
+tk.Button(btn_frame,text="Pie Chart",
+bg="#bde0fe",width=12,command=pie_chart).grid(row=0,column=2,padx=10)
+
+tk.Button(btn_frame,text="Analyze Data",
+bg="#a2d2ff",width=12,command=analyze).grid(row=0,column=3,padx=10)
+
+
+result_label = tk.Label(root,text="",
+font=("Arial",12,"bold"),bg="#f8edeb",fg="#6d6875")
+
+result_label.pack(pady=20)
+
+show_data()
+
 root.mainloop()
